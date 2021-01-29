@@ -3,7 +3,7 @@
 - ##### 참여기간     : 2020.11.23 ~ 2020.12.04
 - ##### 평가기준     : logloss
 - ##### 최종결과     : 상위 21% (private : 58위 / 287)
-- https://dacon.io/competitions/official/235670/mysubmission/
+- https://dacon.io/competitions/official/235670/leaderboard/
 
 ![final_record](https://user-images.githubusercontent.com/54063179/106223881-9f3fc280-6225-11eb-8572-6ae19c1d052b.PNG)
 
