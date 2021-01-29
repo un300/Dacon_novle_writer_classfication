@@ -4,7 +4,8 @@
 
 - ##### 평가기준 : logloss
 
-- ##### 최종결과 : (private : 58위 / 287)
+- ##### 최종결과 : 상위 21% (private : 58위 / 287)
+- https://dacon.io/competitions/official/235670/mysubmission/
 
 ![final_record](./마크다운_이미지/final_record.png)
 
@@ -16,7 +17,7 @@
 
 ## 진행과정
 
-### (1) 데이터 불러오기 및 전처리
+## (1) 데이터 불러오기 및 전처리
 
 - 데이터 전처리 과정은 대회에서 제공해주는 가이드 라인을 적용하였습니다.
 
@@ -32,7 +33,7 @@
 
 - 텍스트 전처리
 
-  - 토큰화는 음절단위로 진행하였습니다.
+  - 토큰화는 음절단위(한글자씩으로)로 진행하였습니다.
 
   ```python
   # 텍스트 전처리(토큰화 + 패딩화)
@@ -88,7 +89,7 @@
 
 ## (2) 초기 딥러닝 모델 적용
 
-- **악플탐지봇**을 구현하면서 배운 `CNN`과 `LSTM`을 이용하여 초기 모델을 구축하였습니다.
+- 같은 공모전에 참여한 사람들이 공유해준 코드를 통해 `CNN`과 `LSTM`을 배울수 있었고, 초기 모델을 구축하였습니다.
 
 - `CNN`과 `LSTM` 모두 5-Fold를 적용하여 최종 Test set을 예측하였습니다.
 
@@ -173,9 +174,7 @@
 
 - 대회에서 제공한 전처리와 단순한 딥러닝 모델로써는 아래와 같이 logloss가 약 0.5를 웃도는 좋지 않은 성능을 내었습니다.
 
-- 각 제출마다 정확한 모델 구조는 기억이 나지 않습니다. 죄송합니다
-
-- 하지만, 위 모델 구조에서 활성화 함수를 relu에서 mish로 변경하거나`Conv1D`, `LSTM`, `Dense`의 노드 개수만 바꾸는 정도의 변화만 주었습니다.
+- 그래서, 위 모델 구조에서 활성화 함수를 relu에서 mish로 변경하거나`Conv1D`, `LSTM`, `Dense`의 노드 개수만 바꾸는 정도로 눈에띄는 성능 향상을 기대할 수 없었습니다.
 
   ![그림2](./마크다운_이미지/그림2.png)
 
@@ -189,8 +188,8 @@
 
 ## (3) Word Embedding 사용 : FastText, Glove
 
-- 모델의 성능을 더욱 높이기 위해, 구글링을 하였고 '자연어처리의 성능은 Embedding과정에 달려있다'는 유튜브 영상을 보았습니다.
-- 그래서 모델의 성능을 높이기 위해 토큰의 단위인 단어를 Embedding하는 `FastText`, `Glove`를 사용하였습니다.
+- 모델의 성능을 더욱 높이기 위해, 구글링을 하였고 '자연어처리의 성능은 Embedding과정에 달려있다'는 글을 접하였습니다.
+- 그래서 모델의 성능을 높이기 위해 토큰의 단위인 단어를 Embedding하는 `FastText`, `Glove` 기법 적용을 시도해 보았습니다.
 
 #### FastText
 
@@ -198,19 +197,15 @@
 !pip install fasttext
 import fasttext
 import fasttext.util
-```
 
-- FastText Vector가 아닌 model을 사용하였기에 불러오는 시간이 오래걸렸습니다.
-
-```python
 print(f"== LOAD fasttext START at {datetime.datetime.now()}")
 ft = fasttext.load_model('/content/drive/MyDrive/FastText/cc.en.300.bin')
 print(f"== LOAD fasttext   END at {datetime.datetime.now()}")
-```
 
-```python
+embedding_dim = 300
+embedding_matrix = np.zeros( (len(word_index)+1, embedding_dim) )
+
 # 임베딩테이블 만들기
-
 embedding_dim = 300
 embedding_matrix = np.zeros( (len(word_index)+1, embedding_dim) )
 for word, idx in word_index.items():
@@ -222,4 +217,102 @@ for word, idx in word_index.items():
 
 
 #### Glove
+- Glove는 model이 아니라 Vector를 사용하였습니다.
+```python
+import numpy as np
+embedding_dict = dict()
+f = open('/content/drive/MyDrive/Glove/glove.6B.300d.txt', encoding="utf8")
 
+for line in f:
+    word_vector = line.split()
+    word = word_vector[0]
+    word_vector_arr = np.asarray(word_vector[1:], dtype='float32')
+    embedding_dict[word] = word_vector_arr
+f.close()
+print('%s개의 Embedding vector가 있습니다.' % len(embedding_dict))
+
+
+embedding_dim = 300
+embedding_matrix = np.zeros( (len(word_index)+1, embedding_dim) )
+
+
+# 임베딩테이블 만들기
+for word, idx in word_index.items():
+    embedding_vector = embedding_dict.get(word)
+
+    if embedding_vector is not None :
+        embedding_matrix[idx] = embedding_vector
+    else :
+        embedding_matrix[idx] = np.zeros((1, embedding_dim))
+
+
+```
+
+
+
+#### Word Embedding을 적용한 1D-CNN 코드
+ - LSTM보다 1D-CNN의 코드가 더욱 좋았기 떄문에 1D-CNN 코드를 보여드립니다.
+
+```python
+def get_model() :
+
+    from tensorflow.keras import Sequential
+    from tensorflow.keras.layers import Dense, Embedding, GlobalMaxPooling1D, Conv1D, Dropout, Flatten, MaxPool1D, GlobalAveragePooling1D, Flatten
+
+    model = Sequential()
+    model.add(Embedding(vocab_size, embedding_dim, weights=[embedding_matrix[0:vocab_size]], input_length=max_length))  ### Fast Text 또는 Glove를 적용
+    model.add(Dropout(0.2))
+    model.add(Conv1D(50, 3, padding='same', activation=mish, strides=1))
+    model.add(GlobalAveragePooling1D())
+    model.add(Flatten())
+    model.add(Dropout(0.2))
+    model.add(Dense(50, activation=mish))
+    model.add(Dropout(0.2))
+    model.add(Dense(n_class, activation='softmax'))
+    model.compile(loss='sparse_categorical_crossentropy', optimizer=Adam(learning_rate=0.002))
+
+    return model
+
+```
+
+
+
+#### Word Embedding 적용 결과
+![그림1](./마크다운_이미지/after_embedding.png)
+
+- 임베딩을 적용하기 전 약 0.5대의 logloss를 보였지만 임베딩 적용 후 약 0.3점 대로 눈에띄는 향상을 보여주었습니다.
+
+
+
+
+
+## (4) 최종 모형
+- 최종모형은 dim이 100인 **Glove Embedding**을 적용한 1D-CNN입니다.
+- 최종모형은 최종제출 `logloss : 0.3255139553`을 기록하였습니다.
+- 모델의 구조는 다음과 같습니다
+```python
+def get_model() :
+
+    from tensorflow.keras import Sequential
+    from tensorflow.keras.layers import Dense, Embedding, GlobalMaxPooling1D, Conv1D, Dropout, Flatten, MaxPool1D, GlobalAveragePooling1D, Flatten
+
+    model = Sequential()
+    model.add(Embedding(vocab_size, embedding_dim, weights=[embedding_matrix[0:vocab_size]], input_length=max_length))  ### Fast Text 또는 Glove를 적용
+    model.add(Dropout(0.2))
+    model.add(Conv1D(50, 3, padding='same', activation=mish, strides=1))
+    model.add(GlobalAveragePooling1D())
+    model.add(Flatten())
+    model.add(Dropout(0.2))
+    model.add(Dense(50, activation=mish))
+    model.add(Dropout(0.2))
+    model.add(Dense(n_class, activation='softmax'))
+    model.compile(loss='sparse_categorical_crossentropy', optimizer=Adam(learning_rate=0.002))
+
+    return model
+```
+
+
+
+## (5) 느낀점
+- 처음 참여해보는 자연어처리 공모전이었고 딥러닝 또한 처음 다루어 보았기에 기초적인 1D-CNN과 LSTM만을 다루어본 것이 아쉽습니다. 조금 더 공부해서 Bert나 VDCNN같은 성능이 좋은 최신 모델을 다루어 보고싶습니다.
+- 자연어 처리에서 임베딩 과정이 성능 향상에 매우 중요하다는 사실을 깨달았습니다.
